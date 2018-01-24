@@ -2,10 +2,12 @@ import os
 import struct
 from array import array as pyarray
 
+from sklearn.metrics import accuracy_score
+from sklearn.neighbors.kd_tree import KDTree
+
 import cv2
 import numpy as np
 from numpy import array, int8, uint8, zeros
-from tensorflow.contrib.metrics import accuracy
 
 portion = 1.0 / 8
 
@@ -22,7 +24,6 @@ class KNN:
         self.train_Y = Y
         self.p = p
         self.k = k
-        from sklearn.neighbors.kd_tree import KDTree
         self.kd_tree = KDTree(self.train_X, metric='minkowski', p=p)
 
     def predict(self, X):
@@ -102,16 +103,18 @@ def extract_features(dataset='training'):
                                       _class_id=kp[5]) for kp in kd] for kd in temp_kds])
         print(dataset + " size: {}".format(kds.shape[0]))
         return kds, dss, train_labels
-    print(dataset + ' objs found!')
+    print(dataset + ' objs not found!')
     train_imgs, train_labels = load([i for i in range(10)], dataset)
     is_cv3 = cv2.__version__.startswith("3.")
     if is_cv3:
-        surf = cv2.xfeatures2d.SURF_create(400, nOctaves=4, nOctaveLayers=3, extended=True, upright=True)
+        surf = cv2.xfeatures2d.SURF_create(400, nOctaves=4, nOctaveLayers=3, extended=False, upright=True)
     else:
-        surf = cv2.xfeatures2d_SURF(400, nOctaves=4, nOctaveLayers=3, extended=True, upright=True)
+        surf = cv2.xfeatures2d_SURF(400, nOctaves=4, nOctaveLayers=3, extended=False, upright=True)
     kds = []
     dss = []
-    for i, img in enumerate(train_imgs[:int(train_imgs.shape[0] * portion)]):
+    train_imgs = train_imgs[:int(train_imgs.shape[0] * portion)]
+    train_labels = train_labels[:int(train_labels.shape[0] * portion)]
+    for i, img in enumerate(train_imgs):
         if i % 1000 == 0:
             print(i)
         kd, ds = surf.detectAndCompute(img, None)
@@ -147,13 +150,13 @@ model.fit(new_x, new_y, k, p=2)
 
 predicted = []
 for i in range(test_kds.shape[0]):
-    # if i % 1000 == 0:
-    print(i)
+    if i % 1000 == 0:
+        print(i)
     new_x = []
     for j in range(len(test_kds[i])):
         new_x.append(test_dss[i][j])
     temp_predicted = model.predict(np.array(new_x))
     label = np.argmax(np.bincount(temp_predicted))
     predicted.append(label)
-acc = accuracy(predicted, test_labels)
+acc = accuracy_score(test_labels, predicted)
 print(acc)
