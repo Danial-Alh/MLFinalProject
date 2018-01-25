@@ -2,12 +2,12 @@ import os
 import struct
 from array import array as pyarray
 
-from sklearn.metrics import accuracy_score
-from sklearn.neighbors.kd_tree import KDTree
-
 import cv2
 import numpy as np
 from numpy import array, int8, uint8, zeros
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.neighbors.kd_tree import KDTree
 
 portion = 1.0 / 8
 
@@ -50,6 +50,53 @@ class KNN:
         predict = np.argmax(np.bincount(candidates))
 
         return predict
+
+
+class WindowBasedEnsembleLearner:
+    def __init__(self, n_windows_in_row, n_windows_in_col, img_width, img_height):
+        self.n_windows_in_row = n_windows_in_row
+        self.n_windows_in_col = n_windows_in_col
+        self.classifiers = [[None for _ in range(n_windows_in_col)] for _ in range(n_windows_in_row)]
+        self.window_width = img_width / n_windows_in_col
+        self.window_height = img_height / n_windows_in_row
+
+    def fit(self, kds, dss, Y):
+        for i in range(self.n_windows_in_row):
+            for j in range(self.n_windows_in_col):
+                window_id = (i, j)
+                print("create window {} dataset!".format(window_id))
+                new_x = []
+                new_y = []
+                for img_id in range(kds.shape[0]):
+                    for m, kd in enumerate(kds[img_id]):
+                        if j * self.window_width <= kd.pt[0] <= (j + 1) * self.window_width \
+                                and i * self.window_height <= kd.pt[1] <= (i + 1) * self.window_height:
+                            new_x.append(dss[img_id][m])
+                            new_y.append(Y[img_id])
+                new_x = np.array(new_x)
+                new_y = np.array(new_y)
+                print("trainig window {} classifier with {} data!".format(window_id, new_x.shape[0]))
+                window_classifier = RandomForestClassifier()
+                window_classifier.fit(new_x, new_y)
+                print("window {} classifier trained!".format(window_id))
+                self.classifiers[i][j] = window_classifier
+
+    def predict(self, kds, dss):
+        predicted = []
+        for img_id in range(kds.shape[0]):
+            votes = []
+            for i in range(self.n_windows_in_row):
+                for j in range(self.n_windows_in_col):
+                    new_x = []
+                    for m, kd in enumerate(kds[img_id]):
+                        if j * self.window_width <= kd.pt[0] <= (j + 1) * self.window_width \
+                                and i * self.window_height <= kd.pt[1] <= (i + 1) * self.window_height:
+                            new_x.append(dss[img_id][m])
+                    if len(new_x) > 0:
+                        votes.extend(self.classifiers[i][j].predict(np.array(new_x)))
+            vote = np.argmax(np.bincount(votes))
+            predicted.append(vote)
+        return predicted
 
 
 def load(digits, dataset="training", path="."):
@@ -99,17 +146,21 @@ def extract_features(dataset='training'):
         print(dataset + ' objs found!')
         temp_kds, dss, train_labels = np.load(dataset + '_kds.npy'), np.load(dataset + '_dss.npy'), np.load(
             dataset + '_labels.npy')
-        kds = np.array([[cv2.KeyPoint(x=kp[0][0], y=kp[0][1], _size=kp[1], _angle=kp[2], _response=kp[3], _octave=kp[4],
-                                      _class_id=kp[5]) for kp in kd] for kd in temp_kds])
+        kds = np.array(
+            [[cv2.KeyPoint(x=kp[0][0], y=kp[0][1], _size=kp[1], _angle=kp[2], _response=kp[3], _octave=kp[4],
+                           _class_id=kp[5]) for kp in kd] for kd in temp_kds])
         print(dataset + " size: {}".format(kds.shape[0]))
         return kds, dss, train_labels
     print(dataset + ' objs not found!')
     train_imgs, train_labels = load([i for i in range(10)], dataset)
+    hessian_threshold, nOctaves, nOctaveLayers, extended, upright = (400, 4, 4, False, True)
     is_cv3 = cv2.__version__.startswith("3.")
     if is_cv3:
-        surf = cv2.xfeatures2d.SURF_create(400, nOctaves=4, nOctaveLayers=3, extended=False, upright=True)
+        surf = cv2.xfeatures2d.SURF_create(hessian_threshold, nOctaves=nOctaves, nOctaveLayers=nOctaveLayers,
+                                           extended=extended, upright=upright)
     else:
-        surf = cv2.xfeatures2d_SURF(400, nOctaves=4, nOctaveLayers=3, extended=False, upright=True)
+        surf = cv2.xfeatures2d_SURF(hessian_threshold, nOctaves=nOctaves, nOctaveLayers=nOctaveLayers,
+                                    extended=extended, upright=upright)
     kds = []
     dss = []
     train_imgs = train_imgs[:int(train_imgs.shape[0] * portion)]
@@ -120,11 +171,10 @@ def extract_features(dataset='training'):
         kd, ds = surf.detectAndCompute(img, None)
         kds.append(kd)
         dss.append(ds)
-        # print(kd)
-        # print(ds)
     kds = np.array(kds)
     dss = np.array(dss)
-    temp_kds = np.array([[(kp.pt, kp.size, kp.angle, kp.response, kp.octave, kp.class_id) for kp in kd] for kd in kds])
+    temp_kds = np.array(
+        [[(kp.pt, kp.size, kp.angle, kp.response, kp.octave, kp.class_id) for kp in kd] for kd in kds])
     np.save(dataset + '_kds', temp_kds)
     np.save(dataset + '_dss', dss)
     np.save(dataset + '_labels', train_labels)
@@ -135,28 +185,34 @@ def extract_features(dataset='training'):
 train_kds, train_dss, train_labels = extract_features()
 test_kds, test_dss, test_labels = extract_features('testing')
 
-new_x = []
-new_y = []
-for i in range(train_kds.shape[0]):
-    for j in range(len(train_kds[i])):
-        t = train_kds[i][j]
-        new_x.append(train_dss[i][j])
-        new_y.append(train_labels[i])
-k = 50
-new_x = np.array(new_x)
-new_y = np.array(new_y)
-model = KNN()
-model.fit(new_x, new_y, k, p=2)
+# new_x = []
+# new_y = []
+# for i in range(train_kds.shape[0]):
+#     for j in range(len(train_kds[i])):
+#         t = train_kds[i][j]
+#         new_x.append(train_dss[i][j])
+#         new_y.append(train_labels[i])
+# k = 50
+# new_x = np.array(new_x)
+# new_y = np.array(new_y)
 
-predicted = []
-for i in range(test_kds.shape[0]):
-    if i % 1000 == 0:
-        print(i)
-    new_x = []
-    for j in range(len(test_kds[i])):
-        new_x.append(test_dss[i][j])
-    temp_predicted = model.predict(np.array(new_x))
-    label = np.argmax(np.bincount(temp_predicted))
-    predicted.append(label)
+# model = RandomForestClassifier()
+# model = KNeighborsClassifier(k, n_jobs=2)
+# model = KNN()
+# model = svm.LinearSVC(verbose=True, max_iter=10000)
+model = WindowBasedEnsembleLearner(3, 3, 192, 192)
+model.fit(train_kds, train_dss, train_labels)
+
+# predicted = []
+# for i in range(test_kds.shape[0]):
+#     if i % 1000 == 0:
+#         print(i)
+#     new_x = []
+#     for j in range(len(test_kds[i])):
+#         new_x.append(test_dss[i][j])
+#     temp_predicted = model.predict(np.array(new_x))
+#     label = np.argmax(np.bincount(temp_predicted))
+#     predicted.append(label)
+predicted = model.predict(test_kds, test_dss)
 acc = accuracy_score(test_labels, predicted)
 print(acc)
