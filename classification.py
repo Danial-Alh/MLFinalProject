@@ -53,12 +53,24 @@ class KNN:
 
 
 class WindowBasedEnsembleLearner:
-    def __init__(self, n_windows_in_row, n_windows_in_col, img_width, img_height):
+    def __init__(self, n_windows_in_row, n_windows_in_col, img_width, img_height, window_width_to_img_width,
+                 window_height_to_img_height):
         self.n_windows_in_row = n_windows_in_row
         self.n_windows_in_col = n_windows_in_col
         self.classifiers = [[None for _ in range(n_windows_in_col)] for _ in range(n_windows_in_row)]
-        self.window_width = img_width / n_windows_in_col
-        self.window_height = img_height / n_windows_in_row
+        self.window_width = window_width_to_img_width * img_width
+        self.window_height = window_height_to_img_height * img_height
+        self.window_centers = [
+            [(x, y) for x in np.linspace(self.window_width / 2, img_width - self.window_width / 2, n_windows_in_col)]
+            for y in np.linspace(self.window_height / 2, img_height - self.window_height / 2, n_windows_in_row)]
+
+    def is_point_in_window(self, pt, w_i, w_j):
+        if self.window_centers[w_i][w_j][0] - self.window_width / 2 \
+                <= pt[0] <= self.window_centers[w_i][w_j][0] + self.window_width / 2 \
+                and self.window_centers[w_i][w_j][1] - self.window_height / 2 \
+                <= pt[1] <= self.window_centers[w_i][w_j][1] + self.window_height / 2:
+            return True
+        return False
 
     def fit(self, kds, dss, Y):
         for i in range(self.n_windows_in_row):
@@ -69,8 +81,7 @@ class WindowBasedEnsembleLearner:
                 new_y = []
                 for img_id in range(kds.shape[0]):
                     for m, kd in enumerate(kds[img_id]):
-                        if j * self.window_width <= kd.pt[0] <= (j + 1) * self.window_width \
-                                and i * self.window_height <= kd.pt[1] <= (i + 1) * self.window_height:
+                        if self.is_point_in_window(kd.pt, i, j):
                             new_x.append(dss[img_id][m])
                             new_y.append(Y[img_id])
                 if len(new_x) == 0:
@@ -78,8 +89,13 @@ class WindowBasedEnsembleLearner:
                     continue
                 new_x = np.array(new_x)
                 new_y = np.array(new_y)
+                # if new_y.max() == new_y.min():
+                #     print("window {}; just one class!".format(window_id))
+                #     continue
                 print("trainig window {} classifier with {} data!".format(window_id, new_x.shape[0]))
                 window_classifier = RandomForestClassifier()
+                # window_classifier = KNeighborsClassifier(np.min([50, new_x.shape[0]]))
+                # window_classifier = svm.SVC(C=np.power(10.0, -6), kernel='linear')
                 window_classifier.fit(new_x, new_y)
                 print("window {} classifier trained!".format(window_id))
                 self.classifiers[i][j] = window_classifier
@@ -94,8 +110,7 @@ class WindowBasedEnsembleLearner:
                         continue
                     new_x = []
                     for m, kd in enumerate(kds[img_id]):
-                        if j * self.window_width <= kd.pt[0] <= (j + 1) * self.window_width \
-                                and i * self.window_height <= kd.pt[1] <= (i + 1) * self.window_height:
+                        if self.is_point_in_window(kd.pt, i, j):
                             new_x.append(dss[img_id][m])
                     if len(new_x) > 0:
                         votes.extend(self.classifiers[i][j].predict(np.array(new_x)))
@@ -158,7 +173,7 @@ def extract_features(dataset='training'):
         return kds, dss, train_labels
     print(dataset + ' objs not found!')
     train_imgs, train_labels = load([i for i in range(10)], dataset)
-    hessian_threshold, nOctaves, nOctaveLayers, extended, upright = (400, 4, 4, False, True)
+    hessian_threshold, nOctaves, nOctaveLayers, extended, upright = (400, 4, 6, False, True)
     is_cv3 = cv2.__version__.startswith("3.")
     if is_cv3:
         surf = cv2.xfeatures2d.SURF_create(hessian_threshold, nOctaves=nOctaves, nOctaveLayers=nOctaveLayers,
@@ -189,6 +204,7 @@ def extract_features(dataset='training'):
 
 train_kds, train_dss, train_labels = extract_features()
 test_kds, test_dss, test_labels = extract_features('testing')
+print(np.bincount(train_labels.flatten()))
 
 # new_x = []
 # new_y = []
@@ -205,7 +221,7 @@ test_kds, test_dss, test_labels = extract_features('testing')
 # model = KNeighborsClassifier(k, n_jobs=2)
 # model = KNN()
 # model = svm.LinearSVC(verbose=True, max_iter=10000)
-model = WindowBasedEnsembleLearner(4, 4, 192, 192)
+model = WindowBasedEnsembleLearner(8, 8, 192, 192, 1. / 6, 1. / 6)
 model.fit(train_kds, train_dss, train_labels)
 
 # predicted = []
@@ -220,4 +236,9 @@ model.fit(train_kds, train_dss, train_labels)
 #     predicted.append(label)
 predicted = model.predict(test_kds, test_dss)
 acc = accuracy_score(test_labels, predicted)
-print("accuracy: {}".format(acc))
+predicted = np.array(predicted)
+print("total accuracy: {}".format(acc))
+for i in range(10):
+    t_ids = [m for m, t in enumerate(test_labels) if t == i]
+    t_acc = accuracy_score(test_labels[t_ids], predicted[t_ids])
+    print("number {} accuracy: {}".format(i, t_acc))
