@@ -5,11 +5,12 @@ from array import array as pyarray
 import cv2
 import numpy as np
 from numpy import array, int8, uint8, zeros
+from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.neighbors.kd_tree import KDTree
 
-portion = 1.0 / 8
+portion = 1.0 / 1
 
 
 class KNN:
@@ -62,11 +63,14 @@ def get_feature_from_kd_ds(kd, ds):
 
 
 class WindowBasedEnsembleLearner:
-    def __init__(self, n_windows_in_row, n_windows_in_col, img_width, img_height, window_width_to_img_width,
+    def __init__(self, reduce_dimens, n_windows_in_row, n_windows_in_col, img_width, img_height,
+                 window_width_to_img_width,
                  window_height_to_img_height):
         self.n_windows_in_row = n_windows_in_row
         self.n_windows_in_col = n_windows_in_col
+        self.reduce_dimens = reduce_dimens
         self.classifiers = [[None for _ in range(n_windows_in_col)] for _ in range(n_windows_in_row)]
+        self.dimen_reducers = [[None for _ in range(n_windows_in_col)] for _ in range(n_windows_in_row)]
         self.window_width = window_width_to_img_width * img_width
         self.window_height = window_height_to_img_height * img_height
         self.window_centers = [
@@ -94,7 +98,7 @@ class WindowBasedEnsembleLearner:
                             new_x.append(get_feature_from_kd_ds(kd, dss[img_id][m]))
                             new_y.append(Y[img_id])
                 if len(new_x) == 0:
-                    print("window {}; not data found!".format(window_id))
+                    print("window {}; no data found!".format(window_id))
                     continue
                 new_x = np.array(new_x)
                 new_y = np.array(new_y)
@@ -102,6 +106,13 @@ class WindowBasedEnsembleLearner:
                 #     print("window {}; just one class!".format(window_id))
                 #     continue
                 print("trainig window {} classifier with {} data!".format(window_id, new_x.shape[0]))
+                if self.reduce_dimens and new_x.shape[0] > 1 and new_y.max() != new_y.min():
+                    # dmr = PCA(n_components=.99, svd_solver='full')
+                    dmr = PCA(n_components=40)
+                    # dmr = LinearDiscriminantAnalysis(n_components=20)
+                    dmr.fit(new_x, new_y)
+                    new_x = np.array(dmr.transform(new_x))
+                    self.dimen_reducers[i][j] = dmr
                 window_classifier = RandomForestClassifier()
                 # window_classifier = KNeighborsClassifier(np.min([50, new_x.shape[0]]))
                 # window_classifier = svm.SVC(C=np.power(10.0, -6), kernel='linear')
@@ -122,6 +133,8 @@ class WindowBasedEnsembleLearner:
                         if self.is_point_in_window(kd.pt, i, j):
                             new_x.append(get_feature_from_kd_ds(kd, dss[img_id][m]))
                     if len(new_x) > 0:
+                        if self.reduce_dimens and self.dimen_reducers[i][j] is not None:
+                            new_x = np.array(self.dimen_reducers[i][j].transform(new_x))
                         votes.extend(self.classifiers[i][j].predict(np.array(new_x)))
             vote = np.argmax(np.bincount(votes))
             predicted.append(vote)
@@ -235,7 +248,7 @@ test_kds, test_dss, test_labels = extract_features('testing')
 # model = svm.LinearSVC(verbose=True, max_iter=10000)
 # model.fit(new_x, new_y)
 
-model = WindowBasedEnsembleLearner(8, 8, 192, 192, 1.0 / 7, 1.0 / 7)
+model = WindowBasedEnsembleLearner(True, 8, 8, 192, 192, 1.0 / 7, 1.0 / 7)
 model.fit(train_kds, train_dss, train_labels)
 
 # predicted = []
