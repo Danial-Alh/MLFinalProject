@@ -73,6 +73,9 @@ class WindowBasedEnsembleLearner:
                                 and i * self.window_height <= kd.pt[1] <= (i + 1) * self.window_height:
                             new_x.append(dss[img_id][m])
                             new_y.append(Y[img_id])
+                if len(new_x) == 0:
+                    print("window {}; not data found!".format(window_id))
+                    continue
                 new_x = np.array(new_x)
                 new_y = np.array(new_y)
                 print("trainig window {} classifier with {} data!".format(window_id, new_x.shape[0]))
@@ -87,6 +90,8 @@ class WindowBasedEnsembleLearner:
             votes = []
             for i in range(self.n_windows_in_row):
                 for j in range(self.n_windows_in_col):
+                    if self.classifiers[i][j] is None:
+                        continue
                     new_x = []
                     for m, kd in enumerate(kds[img_id]):
                         if j * self.window_width <= kd.pt[0] <= (j + 1) * self.window_width \
@@ -200,7 +205,7 @@ test_kds, test_dss, test_labels = extract_features('testing')
 # model = KNeighborsClassifier(k, n_jobs=2)
 # model = KNN()
 # model = svm.LinearSVC(verbose=True, max_iter=10000)
-model = WindowBasedEnsembleLearner(3, 3, 192, 192)
+model = WindowBasedEnsembleLearner(4, 4, 192, 192)
 model.fit(train_kds, train_dss, train_labels)
 
 # predicted = []
