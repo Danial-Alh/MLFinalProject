@@ -52,6 +52,15 @@ class KNN:
         return predict
 
 
+def get_feature_from_kd_ds(kd, ds):
+    # f = [kd.pt[0], kd.pt[1], kd.angle, kd.size, kd.response]
+    f = [kd.angle, kd.size, kd.response]
+    # f = [kd.size, kd.response]
+    f.extend(ds)
+    # return ds
+    return f
+
+
 class WindowBasedEnsembleLearner:
     def __init__(self, n_windows_in_row, n_windows_in_col, img_width, img_height, window_width_to_img_width,
                  window_height_to_img_height):
@@ -82,7 +91,7 @@ class WindowBasedEnsembleLearner:
                 for img_id in range(kds.shape[0]):
                     for m, kd in enumerate(kds[img_id]):
                         if self.is_point_in_window(kd.pt, i, j):
-                            new_x.append(dss[img_id][m])
+                            new_x.append(get_feature_from_kd_ds(kd, dss[img_id][m]))
                             new_y.append(Y[img_id])
                 if len(new_x) == 0:
                     print("window {}; not data found!".format(window_id))
@@ -111,7 +120,7 @@ class WindowBasedEnsembleLearner:
                     new_x = []
                     for m, kd in enumerate(kds[img_id]):
                         if self.is_point_in_window(kd.pt, i, j):
-                            new_x.append(dss[img_id][m])
+                            new_x.append(get_feature_from_kd_ds(kd, dss[img_id][m]))
                     if len(new_x) > 0:
                         votes.extend(self.classifiers[i][j].predict(np.array(new_x)))
             vote = np.argmax(np.bincount(votes))
@@ -204,24 +213,29 @@ def extract_features(dataset='training'):
 
 train_kds, train_dss, train_labels = extract_features()
 test_kds, test_dss, test_labels = extract_features('testing')
-print(np.bincount(train_labels.flatten()))
+# print(np.bincount(train_labels.flatten()))
 
 # new_x = []
 # new_y = []
 # for i in range(train_kds.shape[0]):
 #     for j in range(len(train_kds[i])):
 #         t = train_kds[i][j]
-#         new_x.append(train_dss[i][j])
+#         # new_x.append(train_dss[i][j])
+#         f = [t.pt[0], t.pt[1], t.angle, t.size, t.response]
+#         f.extend(train_dss[i][j])
+#         new_x.append(f)
 #         new_y.append(train_labels[i])
 # k = 50
 # new_x = np.array(new_x)
 # new_y = np.array(new_y)
-
+#
 # model = RandomForestClassifier()
 # model = KNeighborsClassifier(k, n_jobs=2)
 # model = KNN()
 # model = svm.LinearSVC(verbose=True, max_iter=10000)
-model = WindowBasedEnsembleLearner(8, 8, 192, 192, 1. / 6, 1. / 6)
+# model.fit(new_x, new_y)
+
+model = WindowBasedEnsembleLearner(8, 8, 192, 192, 1.0 / 7, 1.0 / 7)
 model.fit(train_kds, train_dss, train_labels)
 
 # predicted = []
@@ -230,7 +244,10 @@ model.fit(train_kds, train_dss, train_labels)
 #         print(i)
 #     new_x = []
 #     for j in range(len(test_kds[i])):
-#         new_x.append(test_dss[i][j])
+#         # new_x.append(test_dss[i][j])
+#         f = [t.pt[0], t.pt[1], t.angle, t.size, t.response]
+#         f.extend(test_dss[i][j])
+#         new_x.append(f)
 #     temp_predicted = model.predict(np.array(new_x))
 #     label = np.argmax(np.bincount(temp_predicted))
 #     predicted.append(label)
