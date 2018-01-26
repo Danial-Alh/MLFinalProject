@@ -1,11 +1,57 @@
+import os
+import struct
+from array import array as pyarray
+
 import numpy as np
+from numpy import array, int8, zeros
 from scipy import stats
 from sklearn import mixture
+from sklearn.decomposition import NMF
 from sklearn.metrics.cluster import adjusted_rand_score
 
-import classification
-
 portion = 1.0 / 8
+
+
+def load(digits, dataset="training", path="."):
+    """
+    Loads MNIST files into 3D numpy arrays
+    Adapted from: http://abel.ee.ucla.edu/cvxopt/_downloads/mnist.py
+    """
+    if dataset is "training":
+        fname_img = os.path.join(path, 'train-images.idx3-ubyte')
+        fname_lbl = os.path.join(path, 'train-labels.idx1-ubyte')
+    elif dataset is "testing":
+        fname_img = os.path.join(path, 't10k-images.idx3-ubyte')
+        fname_lbl = os.path.join(path, 't10k-labels.idx1-ubyte')
+    else:
+        raise ValueError("dataset must be 'testing' or 'training'")
+
+    flbl = open(fname_lbl, 'rb')
+    magic_nr, size = struct.unpack(">II", flbl.read(8))
+    lbl = pyarray("b", flbl.read())
+    flbl.close()
+
+    fimg = open(fname_img, 'rb')
+    magic_nr, size, rows, cols = struct.unpack(">IIII", fimg.read(16))
+    img = pyarray("B", fimg.read())
+    fimg.close()
+
+    ind = [k for k in range(size) if lbl[k] in digits]
+    N = len(ind)
+
+    images = zeros((N, rows, cols), dtype=int8)
+    labels = zeros((N, 1), dtype=int8)
+    for i in range(len(ind)):
+        image = array(img[ind[i] * rows * cols: (ind[i] + 1) * rows * cols]).reshape((rows, cols))
+        labels[i] = lbl[ind[i]]
+
+        images[i] = image
+        # print(image)
+        # print(images[i])
+    temp = np.array(list(zip(images, labels)))
+    np.random.shuffle(temp)
+    images, labels = zip(*temp)
+    return np.array(images), np.array(labels)
 
 
 class KMeans:
@@ -146,12 +192,13 @@ def rand_index(predicted_classes, labels, k):
     return (tp + tn) / (tn + tp + fp + fn)
 
 
-train_kds, train_dss, train_labels = classification.extract_features()
-data = []
-for i in range(train_dss.shape[0]):
-    for j in range(len(train_dss[i])):
-        data.append(train_dss[i][j])
-data = np.array(data)
+# train_kds, train_dss, train_labels = classification.extract_features()
+# data = []
+# for i in range(train_dss.shape[0]):
+#     for j in range(len(train_dss[i])):
+#         data.append(train_dss[i][j])
+# data = np.array(data)
+
 
 # kmeans = KMeans()
 # kmeans.fit(data,10)
@@ -164,23 +211,31 @@ data = np.array(data)
 #         ++counter;
 #         label_kmeans.append(np.argmax(np.bincount(label_temp)))
 
+train_imgs, train_labels = load([i for i in range(10)])
+train_imgs = train_imgs.reshape((train_imgs.shape[0], train_imgs.shape[1] * train_imgs.shape[2]))
+train_imgs = train_imgs + 128
+model = NMF(n_components=2, init='random', random_state=0, verbose=True)
+W = model.fit_transform(X=train_imgs)
+H = model.components_
+# test_imgs, test_labels = load([i for i in range(10)],'testing')
+
 
 label_gmm = []
-gmm = mixture.GaussianMixture(n_components=10, verbose=True, max_iter=1)
-gmm.fit(data)
-l = gmm.predict(data)
+gmm = mixture.GaussianMixture(n_components=10, verbose=True, max_iter=100)
+gmm.fit(H)
+l = gmm.predict(H)
 counter = 0
-for i in range(train_dss.shape[0]):
-    label_temp = []
-    for j in range(len(train_dss[i])):
-        label_temp.append(l[counter])
-        counter += 1
-    temp = np.argmax(np.bincount(label_temp))
-    label_gmm.append(temp)
-label_gmm = np.array(label_gmm)
-# label_gmm = label_gmm.reshape(7500)
-# train_labels = np.array(train_labels)
-train_labels = train_labels.flatten()
-print(label_gmm.shape)
-print(train_labels.shape)
-print(adjusted_rand_score(label_gmm, train_labels))
+# for i in range(train_dss.shape[0]):
+#     label_temp = []
+#     for j in range(len(train_dss[i])):
+#         label_temp.append(l[counter])
+#         counter += 1
+#     temp = np.argmax(np.bincount(label_temp))
+#     label_gmm.append(temp)
+# label_gmm = np.array(label_gmm)
+# # label_gmm = label_gmm.reshape(7500)
+# # train_labels = np.array(train_labels)
+# train_labels = train_labels.flatten()
+# print(label_gmm.shape)
+# print(train_labels.shape)
+print(adjusted_rand_score(l, train_labels))
