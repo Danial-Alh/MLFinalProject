@@ -10,7 +10,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.neighbors.kd_tree import KDTree
 
-portion = 1.0 / 1
+portion = 1.0 / 8
 
 
 class KNN:
@@ -224,51 +224,52 @@ def extract_features(dataset='training'):
     return kds, dss, train_labels
 
 
-train_kds, train_dss, train_labels = extract_features()
-test_kds, test_dss, test_labels = extract_features('testing')
-# print(np.bincount(train_labels.flatten()))
+if __name__ == '__main__':
+    train_kds, train_dss, train_labels = extract_features()
+    test_kds, test_dss, test_labels = extract_features('testing')
+    # print(np.bincount(train_labels.flatten()))
 
-# new_x = []
-# new_y = []
-# for i in range(train_kds.shape[0]):
-#     for j in range(len(train_kds[i])):
-#         t = train_kds[i][j]
-#         # new_x.append(train_dss[i][j])
-#         f = [t.pt[0], t.pt[1], t.angle, t.size, t.response]
-#         f.extend(train_dss[i][j])
-#         new_x.append(f)
-#         new_y.append(train_labels[i])
-# k = 50
-# new_x = np.array(new_x)
-# new_y = np.array(new_y)
-#
-# model = RandomForestClassifier()
-# model = KNeighborsClassifier(k, n_jobs=2)
-# model = KNN()
-# model = svm.LinearSVC(verbose=True, max_iter=10000)
-# model.fit(new_x, new_y)
+    # new_x = []
+    # new_y = []
+    # for i in range(train_kds.shape[0]):
+    #     for j in range(len(train_kds[i])):
+    #         t = train_kds[i][j]
+    #         # new_x.append(train_dss[i][j])
+    #         f = [t.pt[0], t.pt[1], t.angle, t.size, t.response]
+    #         f.extend(train_dss[i][j])
+    #         new_x.append(f)
+    #         new_y.append(train_labels[i])
+    # k = 50
+    # new_x = np.array(new_x)
+    # new_y = np.array(new_y)
+    #
+    # model = RandomForestClassifier()
+    # model = KNeighborsClassifier(k, n_jobs=2)
+    # model = KNN()
+    # model = svm.LinearSVC(verbose=True, max_iter=10000)
+    # model.fit(new_x, new_y)
 
-model = WindowBasedEnsembleLearner(True, 8, 8, 192, 192, 1.0 / 7, 1.0 / 7)
-model.fit(train_kds, train_dss, train_labels)
+    model = WindowBasedEnsembleLearner(False, 8, 8, 192, 192, 1.0 / 7, 1.0 / 7)
+    model.fit(train_kds, train_dss, train_labels)
 
-# predicted = []
-# for i in range(test_kds.shape[0]):
-#     if i % 1000 == 0:
-#         print(i)
-#     new_x = []
-#     for j in range(len(test_kds[i])):
-#         # new_x.append(test_dss[i][j])
-#         f = [t.pt[0], t.pt[1], t.angle, t.size, t.response]
-#         f.extend(test_dss[i][j])
-#         new_x.append(f)
-#     temp_predicted = model.predict(np.array(new_x))
-#     label = np.argmax(np.bincount(temp_predicted))
-#     predicted.append(label)
-predicted = model.predict(test_kds, test_dss)
-acc = accuracy_score(test_labels, predicted)
-predicted = np.array(predicted)
-print("total accuracy: {}".format(acc))
-for i in range(10):
-    t_ids = [m for m, t in enumerate(test_labels) if t == i]
-    t_acc = accuracy_score(test_labels[t_ids], predicted[t_ids])
-    print("number {} accuracy: {}".format(i, t_acc))
+    # predicted = []
+    # for i in range(test_kds.shape[0]):
+    #     if i % 1000 == 0:
+    #         print(i)
+    #     new_x = []
+    #     for j in range(len(test_kds[i])):
+    #         # new_x.append(test_dss[i][j])
+    #         f = [t.pt[0], t.pt[1], t.angle, t.size, t.response]
+    #         f.extend(test_dss[i][j])
+    #         new_x.append(f)
+    #     temp_predicted = model.predict(np.array(new_x))
+    #     label = np.argmax(np.bincount(temp_predicted))
+    #     predicted.append(label)
+    predicted = model.predict(test_kds, test_dss)
+    acc = accuracy_score(test_labels, predicted)
+    predicted = np.array(predicted)
+    print("total accuracy: {}".format(acc))
+    for i in range(10):
+        t_ids = [m for m, t in enumerate(test_labels) if t == i]
+        t_acc = accuracy_score(test_labels[t_ids], predicted[t_ids])
+        print("number {} accuracy: {}".format(i, t_acc))

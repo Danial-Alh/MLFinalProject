@@ -1,5 +1,11 @@
 import numpy as np
 from scipy import stats
+from sklearn import mixture
+from sklearn.metrics.cluster import adjusted_rand_score
+
+import classification
+
+portion = 1.0 / 8
 
 
 class KMeans:
@@ -19,6 +25,8 @@ class KMeans:
         while should_continue:
             if it % 100 == 0:
                 print(it)
+            if it == 1000:
+                break;
             distances = np.array(
                 [[np.linalg.norm(x - self.centroids[cluster_index]) for x in X] for cluster_index in range(k)])
             classes = [[] for _ in range(k)]
@@ -31,7 +39,7 @@ class KMeans:
                 prev = self.centroids[i]
                 self.centroids[i] = np.mean(X[classes[i]], axis=0)
                 delta = np.max([delta, np.linalg.norm(self.centroids[i] - prev)])
-            if 0 <= delta < threshold:
+            if 0 <= delta < 0.01:
                 should_continue = False
             it += 1
         print(self.centroids)
@@ -58,23 +66,31 @@ class GMM:
         print(self.means)
         log_likelihood = -np.inf
         it = 0
+        counter = 0
         while 1:
+            if counter > 5:
+                break
+            print(counter)
+            counter += 1
             if it % 30 == 0:
                 print(it)
                 print(log_likelihood)
             # expectation
             rv = [stats.multivariate_normal(self.means[j], self.covars[j], True) for j in range(k)]
+            print(1)
             probs = np.array([[rv[j].pdf(x) for x in X] for j in range(k)])
+            print(2)
             denominator = probs.T.dot(self.pies)
+            print(3)
             prev_log_likelihood = log_likelihood
             log_likelihood = np.log(denominator).sum()
             log_likelihood_changes = log_likelihood - prev_log_likelihood
-            if 0 <= log_likelihood_changes < threshold:
+            if 0 <= log_likelihood_changes < 2:
                 break
             for i in range(X.shape[0]):
                 for j in range(k):
                     self.gammas[j, i] = self.pies[j] * probs[j, i] / denominator[i]
-
+            print(4)
             # maximization
             N = self.gammas.sum(axis=1)
             self.means = self.gammas.dot(X) / np.repeat(N, 2, axis=0).reshape(k, X.shape[1])
@@ -128,3 +144,43 @@ def rand_index(predicted_classes, labels, k):
     tnfn = comb(labels.shape[0], 2) - tpfp
     tn = tnfn - fn
     return (tp + tn) / (tn + tp + fp + fn)
+
+
+train_kds, train_dss, train_labels = classification.extract_features()
+data = []
+for i in range(train_dss.shape[0]):
+    for j in range(len(train_dss[i])):
+        data.append(train_dss[i][j])
+data = np.array(data)
+
+# kmeans = KMeans()
+# kmeans.fit(data,10)
+# label_kmeans = []
+# counter =0
+# for i in range(train_kds.shape[0]):
+#     label_temp = []
+#     for j in range(len(train_kds[i])):
+#         label_temp.append(kmeans.classes[counter])
+#         ++counter;
+#         label_kmeans.append(np.argmax(np.bincount(label_temp)))
+
+
+label_gmm = []
+gmm = mixture.GaussianMixture(n_components=10, verbose=True, max_iter=1)
+gmm.fit(data)
+l = gmm.predict(data)
+counter = 0
+for i in range(train_dss.shape[0]):
+    label_temp = []
+    for j in range(len(train_dss[i])):
+        label_temp.append(l[counter])
+        counter += 1
+    temp = np.argmax(np.bincount(label_temp))
+    label_gmm.append(temp)
+label_gmm = np.array(label_gmm)
+# label_gmm = label_gmm.reshape(7500)
+# train_labels = np.array(train_labels)
+train_labels = train_labels.flatten()
+print(label_gmm.shape)
+print(train_labels.shape)
+print(adjusted_rand_score(label_gmm, train_labels))
