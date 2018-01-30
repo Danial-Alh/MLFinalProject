@@ -255,7 +255,7 @@ label_gmm = []
 gmm = mixture.GaussianMixture(n_components=10, verbose=True, max_iter=120)
 counter = 1
 while True:
-    pca = PCA(n_components=512)
+    pca = PCA(n_components=counter)
     W=pca.fit_transform(train_imgs)
     gmm.fit(W)
     l = gmm.predict(W)

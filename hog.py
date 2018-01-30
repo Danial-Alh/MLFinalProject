@@ -84,16 +84,16 @@ train_imgs = np.array(train_imgs,dtype=uint8)
 train_imgs = np.array(train_imgs)
 im = train_imgs[0]
 winSize = (28,28)
-blockSize = (4,4)
+blockSize = (8,8)
 blockStride = (4,4)
-cellSize = (4,4)
+cellSize = (2,2)
 nbins =7
 derivAperture = 1
 winSigma = 4.
 histogramNormType = 0
 L2HysThreshold = 2.0000000000000001e-01
 gammaCorrection = 0
-nlevels = 5
+nlevels = 7
 hog = cv2.HOGDescriptor(winSize,blockSize,blockStride,cellSize,nbins,derivAperture,winSigma,
                         histogramNormType,L2HysThreshold,gammaCorrection,nlevels)
 hogs = []
@@ -102,7 +102,7 @@ for img in train_imgs:
     hogs.append(temp)
 hogs = np.array(hogs)
 gmm = mixture.GaussianMixture(n_components=10, verbose=True, max_iter=120)
-hogs=hogs.reshape([60000,343])
+hogs=hogs.reshape([60000,hogs.shape[1]])
 counter = 1 ;
 while True:
     pca = PCA(n_components=counter)
