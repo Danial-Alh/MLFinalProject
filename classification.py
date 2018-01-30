@@ -5,52 +5,11 @@ from array import array as pyarray
 import cv2
 import numpy as np
 from numpy import array, int8, uint8, zeros
-from sklearn.decomposition import PCA
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
-from sklearn.neighbors.kd_tree import KDTree
 
-portion = 1.0 / 8
+from models import WindowBasedEnsembleClassifier
 
-
-class KNN:
-    def __init__(self):
-        self.train_X = None
-        self.train_Y = None
-        self.kd_tree = None
-        self.p = None
-
-    def fit(self, X, Y, k, p):
-        self.train_X = X
-        self.train_Y = Y
-        self.p = p
-        self.k = k
-        self.kd_tree = KDTree(self.train_X, metric='minkowski', p=p)
-
-    def predict(self, X):
-        # print("test started!")
-        # predicts = Parallel(n_jobs=4, verbose=10)(delayed(self.inner_predict)(j, d) for j, d in enumerate(X))
-        predicts = [self.inner_predict(j, d) for j, d in enumerate(X)]
-        return np.array(predicts)
-
-    def inner_predict(self, id, x):
-        # if id % 10 == 0:
-        #     print(id)
-        # t1 = time.time()
-        # costs = np.array([temp_func(i, t_x, x, p) for i, t_x in enumerate(self.train_X)])
-        # top_k = []
-        # for _ in range(k):
-        #     min_arg = int(costs[:, 1].argmin())
-        #     top_k.append(int(costs[min_arg][0]))
-        #     costs = np.delete(costs, min_arg)
-        top_k = self.kd_tree.query([x], k=self.k)[1]
-        # t2 = time.time()
-        # print("elapased: {}".format(t2 - t1))
-        candidates = np.array(self.train_Y[top_k])
-        candidates = candidates.flatten()
-        predict = np.argmax(np.bincount(candidates))
-
-        return predict
+portion = 1.0 / 20
 
 
 def get_feature_from_kd_ds(kd, ds):
@@ -60,85 +19,6 @@ def get_feature_from_kd_ds(kd, ds):
     f.extend(ds)
     # return ds
     return f
-
-
-class WindowBasedEnsembleLearner:
-    def __init__(self, reduce_dimens, n_windows_in_row, n_windows_in_col, img_width, img_height,
-                 window_width_to_img_width,
-                 window_height_to_img_height):
-        self.n_windows_in_row = n_windows_in_row
-        self.n_windows_in_col = n_windows_in_col
-        self.reduce_dimens = reduce_dimens
-        self.classifiers = [[None for _ in range(n_windows_in_col)] for _ in range(n_windows_in_row)]
-        self.dimen_reducers = [[None for _ in range(n_windows_in_col)] for _ in range(n_windows_in_row)]
-        self.window_width = window_width_to_img_width * img_width
-        self.window_height = window_height_to_img_height * img_height
-        self.window_centers = [
-            [(x, y) for x in np.linspace(self.window_width / 2, img_width - self.window_width / 2, n_windows_in_col)]
-            for y in np.linspace(self.window_height / 2, img_height - self.window_height / 2, n_windows_in_row)]
-
-    def is_point_in_window(self, pt, w_i, w_j):
-        if self.window_centers[w_i][w_j][0] - self.window_width / 2 \
-                <= pt[0] <= self.window_centers[w_i][w_j][0] + self.window_width / 2 \
-                and self.window_centers[w_i][w_j][1] - self.window_height / 2 \
-                <= pt[1] <= self.window_centers[w_i][w_j][1] + self.window_height / 2:
-            return True
-        return False
-
-    def fit(self, kds, dss, Y):
-        for i in range(self.n_windows_in_row):
-            for j in range(self.n_windows_in_col):
-                window_id = (i, j)
-                print("create window {} dataset!".format(window_id))
-                new_x = []
-                new_y = []
-                for img_id in range(kds.shape[0]):
-                    for m, kd in enumerate(kds[img_id]):
-                        if self.is_point_in_window(kd.pt, i, j):
-                            new_x.append(get_feature_from_kd_ds(kd, dss[img_id][m]))
-                            new_y.append(Y[img_id])
-                if len(new_x) == 0:
-                    print("window {}; no data found!".format(window_id))
-                    continue
-                new_x = np.array(new_x)
-                new_y = np.array(new_y)
-                # if new_y.max() == new_y.min():
-                #     print("window {}; just one class!".format(window_id))
-                #     continue
-                print("trainig window {} classifier with {} data!".format(window_id, new_x.shape[0]))
-                if self.reduce_dimens and new_x.shape[0] > 1 and new_y.max() != new_y.min():
-                    # dmr = PCA(n_components=.99, svd_solver='full')
-                    dmr = PCA(n_components=40)
-                    # dmr = LinearDiscriminantAnalysis(n_components=20)
-                    dmr.fit(new_x, new_y)
-                    new_x = np.array(dmr.transform(new_x))
-                    self.dimen_reducers[i][j] = dmr
-                window_classifier = RandomForestClassifier()
-                # window_classifier = KNeighborsClassifier(np.min([50, new_x.shape[0]]))
-                # window_classifier = svm.SVC(C=np.power(10.0, -6), kernel='linear')
-                window_classifier.fit(new_x, new_y)
-                print("window {} classifier trained!".format(window_id))
-                self.classifiers[i][j] = window_classifier
-
-    def predict(self, kds, dss):
-        predicted = []
-        for img_id in range(kds.shape[0]):
-            votes = []
-            for i in range(self.n_windows_in_row):
-                for j in range(self.n_windows_in_col):
-                    if self.classifiers[i][j] is None:
-                        continue
-                    new_x = []
-                    for m, kd in enumerate(kds[img_id]):
-                        if self.is_point_in_window(kd.pt, i, j):
-                            new_x.append(get_feature_from_kd_ds(kd, dss[img_id][m]))
-                    if len(new_x) > 0:
-                        if self.reduce_dimens and self.dimen_reducers[i][j] is not None:
-                            new_x = np.array(self.dimen_reducers[i][j].transform(new_x))
-                        votes.extend(self.classifiers[i][j].predict(np.array(new_x)))
-            vote = np.argmax(np.bincount(votes))
-            predicted.append(vote)
-        return predicted
 
 
 def load(digits, dataset="training", path="."):
@@ -249,9 +129,9 @@ if __name__ == '__main__':
     # model = svm.LinearSVC(verbose=True, max_iter=10000)
     # model.fit(new_x, new_y)
 
-    model = WindowBasedEnsembleLearner(False, 8, 8, 192, 192, 1.0 / 7, 1.0 / 7)
+    model = WindowBasedEnsembleClassifier(False, 8, 8, 192, 192, 1.0 / 7, 1.0 / 7)
     model.fit(train_kds, train_dss, train_labels)
-
+    # AdaBoostClassifier()
     # predicted = []
     # for i in range(test_kds.shape[0]):
     #     if i % 1000 == 0:
