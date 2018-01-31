@@ -547,18 +547,19 @@ class WindowBasedEnsembleClassifier:
             for j in range(self.n_windows_in_col):
                 window_id = (i, j)
                 print("create window {} dataset!".format(window_id))
-                new_x = []
-                new_y = []
+                new_x = np.array([[0 for _ in get_feature_from_kd_ds(kds[0][0], dss[0][0])]])
+                new_y = np.array([])
                 for img_id in range(kds.shape[0]):
                     for m, kd in enumerate(kds[img_id]):
                         if self.is_point_in_window(kd.pt, i, j):
-                            new_x.append(get_feature_from_kd_ds(kd, dss[img_id][m]))
-                            new_y.append(Y[img_id])
+                            new_x = np.append(new_x, [get_feature_from_kd_ds(kd, dss[img_id][m])], axis=0)
+                            new_y = np.append(new_y, Y[img_id])
+                new_x = new_x[1:]
                 if len(new_x) == 0:
                     print("window {}; no data found!".format(window_id))
                     continue
-                new_x = np.array(new_x)
-                new_y = np.array(new_y)
+                # new_x = np.array(new_x)
+                # new_y = np.array(new_y)
                 # if new_y.max() == new_y.min():
                 #     print("window {}; just one class!".format(window_id))
                 #     continue
