@@ -3,9 +3,53 @@ import numpy as np
 from numpy import uint8
 from sklearn.decomposition import PCA
 from sklearn.model_selection import KFold
-
-from feature_extractor import load
+import os
+import struct
+from numpy import array, int8, uint8, zeros
+from array import array as pyarray
 from models import GMM, purity_score
+
+def load(digits, dataset="training", path="."):
+    """
+    Loads MNIST files into 3D numpy arrays
+    Adapted from: http://abel.ee.ucla.edu/cvxopt/_downloads/mnist.py
+    """
+    if dataset is "training":
+        fname_img = os.path.join(path, 'train-images.idx3-ubyte')
+        fname_lbl = os.path.join(path, 'train-labels.idx1-ubyte')
+    elif dataset is "testing":
+        fname_img = os.path.join(path, 't10k-images.idx3-ubyte')
+        fname_lbl = os.path.join(path, 't10k-labels.idx1-ubyte')
+    else:
+        raise ValueError("dataset must be 'testing' or 'training'")
+
+    flbl = open(fname_lbl, 'rb')
+    magic_nr, size = struct.unpack(">II", flbl.read(8))
+    lbl = pyarray("b", flbl.read())
+    flbl.close()
+
+    fimg = open(fname_img, 'rb')
+    magic_nr, size, rows, cols = struct.unpack(">IIII", fimg.read(16))
+    img = pyarray("B", fimg.read())
+    fimg.close()
+
+    ind = [k for k in range(size) if lbl[k] in digits]
+    N = len(ind)
+
+    images = zeros((N, rows, cols), dtype=int8)
+    labels = zeros((N, 1), dtype=int8)
+    for i in range(len(ind)):
+        image = array(img[ind[i] * rows * cols: (ind[i] + 1) * rows * cols]).reshape((rows, cols))
+        labels[i] = lbl[ind[i]]
+
+        images[i] = image
+        # print(image)
+        # print(images[i])
+    temp = np.array(list(zip(images, labels)))
+    np.random.shuffle(temp)
+    images, labels = zip(*temp)
+    return np.array(images), np.array(labels)
+
 
 if __name__ == '__main__':
     train_imgs, train_labels = load([i for i in range(10)])
@@ -36,7 +80,7 @@ if __name__ == '__main__':
     hogs = np.array(hogs)
     # gmm = mixture.GaussianMixture(n_components=10, verbose=True, max_iter=120)
     # gmm = GMM(n_components=10, max_iter=120)
-    # hogs = hogs.reshape([60000, hogs.shape[1]])
+    hogs = hogs.reshape([hogs.shape[0], hogs.shape[1]])
     # counter = 1
     # while True:
     #     pca = PCA(n_components=counter)
