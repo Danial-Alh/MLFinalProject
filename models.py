@@ -5,8 +5,33 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics.classification import accuracy_score
 from sklearn.mixture import GaussianMixture
 
-from classification import extract_features, get_feature_from_kd_ds
-from clustering import purity_score
+from feature_extractor import get_feature_from_kd_ds, extract_features
+
+
+def purity_score(clusters, classes):
+    """
+    Calculate the purity score for the given cluster assignments and ground truth classes
+
+    :param clusters: the cluster assignments array
+    :type clusters: numpy.array
+
+    :param classes: the ground truth classes
+    :type classes: numpy.array
+
+    :returns: the purity score
+    :rtype: float
+    """
+
+    A = np.c_[(clusters, classes)]
+
+    n_accurate = 0.
+
+    for j in np.unique(A[:, 0]):
+        z = A[A[:, 0] == j, 1]
+        x = np.argmax(np.bincount(z))
+        n_accurate += len(z[z == x])
+
+    return n_accurate / A.shape[0]
 
 
 def get_value_frequency(data):
@@ -205,14 +230,16 @@ class RandomForest:
 
 
 class GMM:
-    def __init__(self, n_components):
+    def __init__(self, n_components, threshold=None, max_iter=None):
         self.means = None
         self.covars = None
         self.pies = None
         self.gammas = None
         # self.classes = None
         self.k = n_components
-        self.threshold = .01
+        # self.threshold = .01
+        self.threshold = threshold
+        self.max_iter = max_iter
 
     def fit(self, X):
         k = self.k
@@ -239,7 +266,10 @@ class GMM:
             prev_log_likelihood = log_likelihood
             log_likelihood = np.log(denominator).sum()
             log_likelihood_changes = log_likelihood - prev_log_likelihood
-            if 0 <= log_likelihood_changes < self.threshold:
+            if self.threshold is None:
+                if it > self.max_iter:
+                    break
+            elif 0 <= log_likelihood_changes < self.threshold:
                 break
             for i in range(X.shape[0]):
                 for j in range(k):
@@ -270,16 +300,16 @@ class GMM:
 
 
 class PCA:
-    def __init__(self, n_components=10, features_are_less_than_samples=False):
+    def __init__(self, n_components=10, features_are_less_than_samples=True):
         self.eigen_vectors = None
         self.features_are_less_than_samples = features_are_less_than_samples
         self.k = n_components
 
-    def fit(self, x: np.ndarray):
+    def fit(self, x):
         if self.features_are_less_than_samples:
-            self.__tricky_fit(x)
-        else:
             self.__ordinary_fit(x)
+        else:
+            self.__tricky_fit(x)
 
     def __tricky_fit(self, x: np.ndarray):
         self.X = x
@@ -322,8 +352,14 @@ class PCA:
         # print(reduced)
 
     def transform(self, x):
+        if type(x) is not np.ndarray:
+            x = np.array(x)
         reduced = x.dot(self.eigen_vectors)
         return reduced
+
+    def fit_transform(self, x):
+        self.fit(x)
+        return self.transform(x)
 
 
 class WindowBasedEnsembleClustering:
@@ -480,12 +516,14 @@ class WindowBasedEnsembleClustering:
 
 
 class WindowBasedEnsembleClassifier:
-    def __init__(self, reduce_dimens, n_windows_in_row, n_windows_in_col, img_width, img_height,
+    def __init__(self, reduce_dimens, reduced_dimens, n_windows_in_row, n_windows_in_col, img_width, img_height,
                  window_width_to_img_width,
-                 window_height_to_img_height):
+                 window_height_to_img_height, n_estimators=10):
+        self.n_estimators = n_estimators
         self.n_windows_in_row = n_windows_in_row
         self.n_windows_in_col = n_windows_in_col
         self.reduce_dimens = reduce_dimens
+        self.reduced_dimens = reduced_dimens
         self.classifiers = [[None for _ in range(n_windows_in_col)] for _ in range(n_windows_in_row)]
         self.dimen_reducers = [[None for _ in range(n_windows_in_col)] for _ in range(n_windows_in_row)]
         self.window_width = window_width_to_img_width * img_width
@@ -525,12 +563,12 @@ class WindowBasedEnsembleClassifier:
                 print("trainig window {} classifier with {} data!".format(window_id, new_x.shape[0]))
                 if self.reduce_dimens and new_x.shape[0] > 1 and new_y.max() != new_y.min():
                     # dmr = PCA(n_components=.99, svd_solver='full')
-                    dmr = PCA(n_components=40)
+                    dmr = PCA(n_components=self.reduced_dimens)
                     # dmr = LinearDiscriminantAnalysis(n_components=20)
-                    dmr.fit(new_x, new_y)
+                    dmr.fit(new_x)
                     new_x = np.array(dmr.transform(new_x))
                     self.dimen_reducers[i][j] = dmr
-                window_classifier = RandomForestClassifier()
+                window_classifier = RandomForestClassifier(self.n_estimators)
                 # window_classifier = KNeighborsClassifier(np.min([50, new_x.shape[0]]))
                 # window_classifier = svm.SVC(C=np.power(10.0, -6), kernel='linear')
                 window_classifier.fit(new_x, new_y)
@@ -555,17 +593,18 @@ class WindowBasedEnsembleClassifier:
                         votes.extend(self.classifiers[i][j].predict(np.array(new_x)))
             vote = np.argmax(np.bincount(votes))
             predicted.append(vote)
-        return predicted
+        return np.array(predicted)
 
 
-train_kds, train_dss, train_labels = extract_features()
-model = DecisionTree(10)
-new_x = []
-new_y = []
-for img_id in range(train_kds.shape[0]):
-    for m, kd in enumerate(train_kds[img_id]):
-        new_x.append(get_feature_from_kd_ds(kd, train_dss[img_id][m]))
-        new_y.append(train_labels[img_id])
-new_x = np.array(new_x)
-new_y = np.array(new_y)
-model.fit(new_x, new_y)
+if __name__ == '__main__':
+    train_kds, train_dss, train_labels = extract_features()
+    model = DecisionTree(10)
+    new_x = []
+    new_y = []
+    for img_id in range(train_kds.shape[0]):
+        for m, kd in enumerate(train_kds[img_id]):
+            new_x.append(get_feature_from_kd_ds(kd, train_dss[img_id][m]))
+            new_y.append(train_labels[img_id])
+    new_x = np.array(new_x)
+    new_y = np.array(new_y)
+    model.fit(new_x, new_y)
