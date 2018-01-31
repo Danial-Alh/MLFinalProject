@@ -8,6 +8,8 @@ import struct
 from numpy import array, int8, uint8, zeros
 from array import array as pyarray
 from models import GMM, purity_score
+import sklearn.mixture as mixture
+
 
 def load(digits, dataset="training", path="."):
     """
@@ -53,8 +55,8 @@ def load(digits, dataset="training", path="."):
 
 if __name__ == '__main__':
     train_imgs, train_labels = load([i for i in range(10)])
-    train_imgs, train_labels = train_imgs[:int(train_imgs.shape[0] * .02)], train_labels[
-                                                                            :int(train_imgs.shape[0] * .02)]
+    train_imgs, train_labels = train_imgs[:int(train_imgs.shape[0] * .4)], train_labels[
+                                                                            :int(train_imgs.shape[0] * .4)]
     print("loaded!")
     train_imgs = train_imgs + 128
     train_imgs = np.array(train_imgs, dtype=uint8)
@@ -108,7 +110,7 @@ if __name__ == '__main__':
             print("TRAIN:", train_index, "TEST:", test_index)
             hog_temp_train, hog_temp_test = w[train_index], w[test_index]
             y_temp_train, y_temp_test = train_labels[train_index], train_labels[test_index]
-            gmm = GMM(n_components=10, max_iter=120)
+            gmm= mixture.GaussianMixture(n_components=10, verbose=True, max_iter=120)
             gmm.fit(hog_temp_train)
             predicted = gmm.predict(hog_temp_test)
             acc = purity_score(predicted, y_temp_test)
