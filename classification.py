@@ -77,8 +77,8 @@ def final_train():
     train_kds, train_dss, train_labels = extract_features()
     test_kds, test_dss, test_labels = extract_features('testing')
     accuracies = []
-    for _ in range(10):
-        model = WindowBasedEnsembleClassifier(False, 40, 'entropy', 8, 8, 192, 192, 1.0 / 7, 1.0 / 7, 20)
+    for _ in range(3):
+        model = WindowBasedEnsembleClassifier(False, 40, 'gini', 8, 8, 192, 192, 1.0 / 7, 1.0 / 7, 20)
         model.fit(train_kds, train_dss, train_labels)
         predicted = model.predict(test_kds, test_dss)
         acc = accuracy_score(test_labels, predicted)

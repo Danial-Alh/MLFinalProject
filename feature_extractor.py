@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from numpy import array, int8, uint8, zeros
 
-portion = 1.0 / 20
+portion = 1.0 / 1
 
 
 def get_feature_from_kd_ds(kd, ds):
