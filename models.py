@@ -230,7 +230,7 @@ class RandomForest:
 
 
 class GMM:
-    def __init__(self, n_components, threshold=None, max_iter=None):
+    def __init__(self, n_components, threshold=.01, max_iter=300):
         self.means = None
         self.covars = None
         self.pies = None
@@ -266,18 +266,18 @@ class GMM:
             prev_log_likelihood = log_likelihood
             log_likelihood = np.log(denominator).sum()
             log_likelihood_changes = log_likelihood - prev_log_likelihood
-            if self.threshold is None:
-                if it > self.max_iter:
-                    break
-            elif 0 <= log_likelihood_changes < self.threshold:
+            if 0 <= log_likelihood_changes < self.threshold:
                 break
+            if it > self.max_iter:
+                break
+
             for i in range(X.shape[0]):
                 for j in range(k):
                     self.gammas[j, i] = self.pies[j] * probs[j, i] / denominator[i]
 
             # maximization
             N = self.gammas.sum(axis=1)
-            self.means = self.gammas.dot(X) / np.repeat(N, 2, axis=0).reshape(k, X.shape[1])
+            self.means = self.gammas.dot(X) / np.repeat(N, X.shape[1], axis=0).reshape(k, X.shape[1])
             for j in range(k):
                 self.covars[j] = np.zeros((X.shape[1], X.shape[1]))
                 for i in range(X.shape[0]):
@@ -516,10 +516,12 @@ class WindowBasedEnsembleClustering:
 
 
 class WindowBasedEnsembleClassifier:
-    def __init__(self, reduce_dimens, reduced_dimens, n_windows_in_row, n_windows_in_col, img_width, img_height,
+    def __init__(self, reduce_dimens, reduced_dimens, criterion, n_windows_in_row, n_windows_in_col, img_width,
+                 img_height,
                  window_width_to_img_width,
                  window_height_to_img_height, n_estimators=10):
         self.n_estimators = n_estimators
+        self.criterion = criterion
         self.n_windows_in_row = n_windows_in_row
         self.n_windows_in_col = n_windows_in_col
         self.reduce_dimens = reduce_dimens
@@ -568,7 +570,7 @@ class WindowBasedEnsembleClassifier:
                     dmr.fit(new_x)
                     new_x = np.array(dmr.transform(new_x))
                     self.dimen_reducers[i][j] = dmr
-                window_classifier = RandomForestClassifier(self.n_estimators)
+                window_classifier = RandomForestClassifier(self.n_estimators, criterion=self.criterion)
                 # window_classifier = KNeighborsClassifier(np.min([50, new_x.shape[0]]))
                 # window_classifier = svm.SVC(C=np.power(10.0, -6), kernel='linear')
                 window_classifier.fit(new_x, new_y)

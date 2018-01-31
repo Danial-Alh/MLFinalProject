@@ -1,14 +1,14 @@
-import cv2
-import numpy as np
-from numpy import uint8
-from sklearn.decomposition import PCA
-from sklearn.model_selection import KFold
 import os
 import struct
-from numpy import array, int8, uint8, zeros
 from array import array as pyarray
+
+import cv2
+import numpy as np
+from numpy import array, int8, uint8, zeros
+from sklearn.decomposition import PCA
+from sklearn.model_selection import KFold
+
 from models import GMM, purity_score
-import sklearn.mixture as mixture
 
 
 def load(digits, dataset="training", path="."):
@@ -110,7 +110,7 @@ if __name__ == '__main__':
             print("TRAIN:", train_index, "TEST:", test_index)
             hog_temp_train, hog_temp_test = w[train_index], w[test_index]
             y_temp_train, y_temp_test = train_labels[train_index], train_labels[test_index]
-            gmm= mixture.GaussianMixture(n_components=10, verbose=True, max_iter=120)
+            gmm = GMM(n_components=10, max_iter=120)
             gmm.fit(hog_temp_train)
             predicted = gmm.predict(hog_temp_test)
             acc = purity_score(predicted, y_temp_test)

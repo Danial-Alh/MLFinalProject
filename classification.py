@@ -5,9 +5,9 @@ from sklearn.model_selection import KFold
 from feature_extractor import extract_features
 from models import WindowBasedEnsembleClassifier
 
-if __name__ == '__main__':
+
+def parameter_tuner():
     train_kds, train_dss, train_labels = extract_features()
-    test_kds, test_dss, test_labels = extract_features('testing')
     # print(np.bincount(train_labels.flatten()))
 
     # new_x = []
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     # model.fit(new_x, new_y)
     kf = KFold(n_splits=3, shuffle=True)
     accuracies = []
-    pars = [10, 30, 40, 50, 60]
+    pars = ['entropy', 'gini']
     for par in pars:
         print(par)
         r = []
@@ -40,7 +40,7 @@ if __name__ == '__main__':
             kds_temp_train, dss_temp_train, kds_temp_test, dss_temp_test = \
                 train_kds[train_index], train_dss[train_index], train_kds[test_index], train_dss[test_index]
             y_temp_train, y_temp_test = train_labels[train_index], train_labels[test_index]
-            model = WindowBasedEnsembleClassifier(True, par, 8, 8, 192, 192, 1.0 / 7, 1.0 / 7, 20)
+            model = WindowBasedEnsembleClassifier(False, 40, par, 8, 8, 192, 192, 1.0 / 7, 1.0 / 7, 20)
             model.fit(kds_temp_train, dss_temp_train, y_temp_train)
             predicted = model.predict(kds_temp_test, dss_temp_test)
             acc = accuracy_score(y_temp_test, predicted)
@@ -71,3 +71,26 @@ if __name__ == '__main__':
     #     temp_predicted = model.predict(np.array(new_x))
     #     label = np.argmax(np.bincount(temp_predicted))
     #     predicted.append(label)
+
+
+def final_train():
+    train_kds, train_dss, train_labels = extract_features()
+    test_kds, test_dss, test_labels = extract_features('testing')
+    accuracies = []
+    for _ in range(10):
+        model = WindowBasedEnsembleClassifier(False, 40, 'entropy', 8, 8, 192, 192, 1.0 / 7, 1.0 / 7, 20)
+        model.fit(train_kds, train_dss, train_labels)
+        predicted = model.predict(test_kds, test_dss)
+        acc = accuracy_score(test_labels, predicted)
+        accuracies.append(acc)
+        print("total accuracy: {}".format(acc))
+        for i in range(10):
+            t_ids = [m for m, t in enumerate(test_labels) if t == i]
+            t_acc = accuracy_score(test_labels[t_ids], predicted[t_ids])
+            print("number {} accuracy: {}".format(i, t_acc))
+    print("mean accuracy: {}".format(np.mean(accuracies)))
+
+
+if __name__ == '__main__':
+    # parameter_tuner()
+    final_train()
